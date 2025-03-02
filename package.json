@@ -27,8 +27,10 @@
       ]
     },
     "messageKeys": [
+      "MessageType",
       "Count",
-      "Topics"
+      "TopicName",
+      "TopicURL"
     ]
   }
 }

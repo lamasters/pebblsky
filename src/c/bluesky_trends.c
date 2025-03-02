@@ -1,129 +1,99 @@
 #include <pebble.h>
 
 #define MAX_TOPICS 10
-#define MAX_TOPIC_LENGTH 32
 
 static Window *s_topics_window;
 static MenuLayer *s_topic_layer;
 
 static char s_topic_text[32];
 
-static char* topics[MAX_TOPICS];
 static int num_topics = 0;
+static int loaded_topics = 0;
 
-void split_string_into_array(const char *input) {
-  // Clear previous topics
-  for (int i = 0; i < num_topics; i++) {
-    free(topics[i]);
-  }
-  num_topics = 0;
+typedef struct Topic
+{
+  char name[32];
+  char url[128];
+} Topic;
 
-  // Allocate memory for the input copy
-  char *input_copy = malloc(strlen(input) + 1);
-  if (!input_copy) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to allocate memory for input copy");
-    return;
-  }
+static Topic topics[MAX_TOPICS];
 
-  // Copy the input string to the allocated memory
-  strcpy(input_copy, input);
-
-  // Split the string by commas manually
-  char *start = input_copy;
-  char *end = input_copy;
-  while (*end != '\0' && num_topics < MAX_TOPICS) {
-    if (*end == ',') {
-      *end = '\0';
-      topics[num_topics] = malloc(MAX_TOPIC_LENGTH);
-      if (topics[num_topics] == NULL) {
-        APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to allocate memory for topic");
-        break;
-      }
-      strncpy(topics[num_topics], start, MAX_TOPIC_LENGTH - 1);
-      topics[num_topics][MAX_TOPIC_LENGTH - 1] = '\0'; // Ensure null-termination
-      num_topics++;
-      start = end + 1;
-    }
-    end++;
-  }
-
-  // Add the last topic
-  if (num_topics < MAX_TOPICS) {
-    topics[num_topics] = malloc(MAX_TOPIC_LENGTH);
-    if (topics[num_topics] == NULL) {
-      APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to allocate memory for topic");
-    } else {
-      strncpy(topics[num_topics], start, MAX_TOPIC_LENGTH - 1);
-      topics[num_topics][MAX_TOPIC_LENGTH - 1] = '\0'; // Ensure null-termination
-      num_topics++;
-    }
-  }
-
-  free(input_copy);
-}
-
-static void select_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index, 
-                            void *callback_context) {
+static void select_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index,
+                            void *callback_context)
+{
   // Switch to countdown window
   // window_stack_push(s_countdown_window, false);
 }
 
-static uint16_t get_sections_count_callback(struct MenuLayer *menulayer, uint16_t section_index, 
-                                            void *callback_context) {
+static uint16_t get_sections_count_callback(struct MenuLayer *menulayer, uint16_t section_index,
+                                            void *callback_context)
+{
   return num_topics;
 }
 
 #ifdef PBL_ROUND
-static int16_t get_cell_height_callback(MenuLayer *menu_layer, MenuIndex *cell_index, 
-                                        void *callback_context) {
+static int16_t get_cell_height_callback(MenuLayer *menu_layer, MenuIndex *cell_index,
+                                        void *callback_context)
+{
   return 60;
 }
 #endif
 
-static void draw_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, 
-                             void *callback_context) {
-  char* name = topics[cell_index->row];
+static void draw_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
+                             void *callback_context)
+{
+  char *name = topics[cell_index->row].name;
 
   snprintf(s_topic_text, sizeof(s_topic_text), "%s", name);
   menu_cell_basic_draw(ctx, cell_layer, name, NULL, NULL);
 }
 
-static void menu_window_load(Window *window) {
+static void menu_window_load(Window *window)
+{
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
 
   s_topic_layer = menu_layer_create(bounds);
-  menu_layer_set_callbacks(s_topic_layer, NULL, (MenuLayerCallbacks){
-    .get_num_rows = get_sections_count_callback,
-    .get_cell_height = PBL_IF_ROUND_ELSE(get_cell_height_callback, NULL),
-    .draw_row = draw_row_handler,
-    .select_click = select_callback
-  }); 
-  menu_layer_set_click_config_onto_window(s_topic_layer,	window);
+  menu_layer_set_callbacks(s_topic_layer, NULL, (MenuLayerCallbacks){.get_num_rows = get_sections_count_callback, .get_cell_height = PBL_IF_ROUND_ELSE(get_cell_height_callback, NULL), .draw_row = draw_row_handler, .select_click = select_callback});
+  menu_layer_set_click_config_onto_window(s_topic_layer, window);
   menu_layer_set_highlight_colors(s_topic_layer, GColorPictonBlue, GColorWhite);
   layer_add_child(window_layer, menu_layer_get_layer(s_topic_layer));
 }
 
-static void menu_window_unload(Window *window) {
+static void menu_window_unload(Window *window)
+{
   menu_layer_destroy(s_topic_layer);
 }
 
 static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
 {
-  Tuple *count_tuple = dict_find(iterator, MESSAGE_KEY_Count);
-  Tuple *topics_tuple = dict_find(iterator, MESSAGE_KEY_Topics);
+  Tuple *msg_type = dict_find(iterator, MESSAGE_KEY_MessageType);
+  if (!msg_type)
+  {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "RequestType not found!");
+    return;
+  }
 
-  if (count_tuple && topics_tuple) {
-    int count = count_tuple->value->int32;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Count: %d", count);
+  if (strcmp(msg_type->value->cstring, "count") == 0)
+  {
+    Tuple *count_tuple = dict_find(iterator, MESSAGE_KEY_Count);
+    num_topics = count_tuple->value->int32;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Total topics: %d", num_topics);
+  }
+  if (strcmp(msg_type->value->cstring, "topics") == 0)
+  {
+    Tuple *name_tuple = dict_find(iterator, MESSAGE_KEY_TopicName);
+    Tuple *url_tuple = dict_find(iterator, MESSAGE_KEY_TopicURL);
+    char *name = name_tuple->value->cstring;
+    char *url = url_tuple->value->cstring;
+    strncpy(topics[loaded_topics].name, name, sizeof(topics[loaded_topics].name) - 1);
+    topics[loaded_topics].name[sizeof(topics[loaded_topics].name) - 1] = '\0';
+    loaded_topics++;
+  }
 
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Topics: %s", topics_tuple->value->cstring);
-    split_string_into_array(topics_tuple->value->cstring);
-
-    // Log the topics
-    for (int i = 0; i < num_topics; i++) {
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Topic %d: %s", i, topics[i]);
-    }
+  if (num_topics == loaded_topics)
+  {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Reloading menu");
     menu_layer_reload_data(s_topic_layer);
   }
 }
@@ -143,29 +113,32 @@ static void outbox_sent_callback(DictionaryIterator *iterator, void *context)
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Outbox send success!");
 }
 
-static void init(void) {
+static void init(void)
+{
   s_topics_window = window_create();
   window_set_window_handlers(s_topics_window, (WindowHandlers){
-    .load = menu_window_load,
-    .unload = menu_window_unload,
-  });
+                                                  .load = menu_window_load,
+                                                  .unload = menu_window_unload,
+                                              });
   window_stack_push(s_topics_window, false);
-  
+
   app_message_register_inbox_received(inbox_recv_callback);
   app_message_register_inbox_dropped(inbox_drop_callback);
   app_message_register_outbox_failed(outbox_fail_callback);
   app_message_register_outbox_sent(outbox_sent_callback);
 
-  const int inbox_size = 256;
+  const int inbox_size = 512;
   const int outbox_size = 128;
   app_message_open(inbox_size, outbox_size);
 }
 
-static void deinit(void) {
+static void deinit(void)
+{
   window_destroy(s_topics_window);
 }
 
-int main(void) {
+int main(void)
+{
   init();
   app_event_loop();
   deinit();
