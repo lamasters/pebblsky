@@ -30,7 +30,9 @@
       "MessageType",
       "Count",
       "TopicName",
-      "TopicURL"
+      "TopicId",
+      "PostHandle",
+      "PostText"
     ]
   }
 }
