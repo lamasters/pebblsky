@@ -100,6 +100,7 @@ static void menu_window_load(Window *window) {
     .select_click = select_callback
   }); 
   menu_layer_set_click_config_onto_window(s_topic_layer,	window);
+  menu_layer_set_highlight_colors(s_topic_layer, GColorPictonBlue, GColorWhite);
   layer_add_child(window_layer, menu_layer_get_layer(s_topic_layer));
 }
 
