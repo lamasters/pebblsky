@@ -1,7 +1,7 @@
 {
   "name": "bluesky-trends",
   "author": "Liam Masters",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "pebble": {
     "displayName": "Bluesky Trends",
     "uuid": "d97cb00a-931d-4502-a89f-3fcaf1fb515c",
