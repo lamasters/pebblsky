@@ -1,0 +1,34 @@
+{
+  "name": "bluesky-trends",
+  "author": "Liam Masters",
+  "version": "1.0.0",
+  "pebble": {
+    "displayName": "Bluesky Trends",
+    "uuid": "d97cb00a-931d-4502-a89f-3fcaf1fb515c",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "resources": {
+      "media": [
+        {
+          "menuIcon": true,
+          "type": "bitmap",
+          "name": "IMAGE_ICON",
+          "file": "butterfly_icon.png"
+        }
+      ]
+    },
+    "messageKeys": [
+      "Count",
+      "Topics"
+    ]
+  }
+}
