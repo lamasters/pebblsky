@@ -1,7 +1,7 @@
 {
   "name": "pebblsky",
   "author": "Liam Masters",
-  "version": "1.4",
+  "version": "1.5",
   "pebble": {
     "displayName": "Pebblsky",
     "uuid": "d97cb00a-931d-4502-a89f-3fcaf1fb515c",
