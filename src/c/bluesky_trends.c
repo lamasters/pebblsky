@@ -69,10 +69,16 @@ static void select_post_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell
   window_stack_push(s_post_window, false);
 }
 
-static uint16_t get_sections_count_callback(struct MenuLayer *menulayer, uint16_t section_index,
-                                            void *callback_context)
+static uint16_t get_topics_count_callback(struct MenuLayer *menulayer, uint16_t section_index,
+                                          void *callback_context)
 {
   return num_topics;
+}
+
+static uint16_t get_post_count_callback(struct MenuLayer *menulayer, uint16_t section_index,
+                                        void *callback_context)
+{
+  return num_posts;
 }
 
 #ifdef PBL_ROUND
@@ -128,7 +134,7 @@ static void topic_window_load(Window *window)
 
   s_topic_layer = menu_layer_create(bounds);
   menu_layer_set_callbacks(s_topic_layer, NULL, (MenuLayerCallbacks){
-                                                    .get_num_rows = get_sections_count_callback,
+                                                    .get_num_rows = get_topics_count_callback,
                                                     .get_cell_height = PBL_IF_ROUND_ELSE(get_cell_height_callback, NULL),
                                                     .draw_row = draw_trend_row_handler,
                                                     .select_click = select_feed_callback,
@@ -152,7 +158,7 @@ static void feed_window_load(Window *window)
 
   s_feed_layer = menu_layer_create(bounds);
   menu_layer_set_callbacks(s_feed_layer, NULL, (MenuLayerCallbacks){
-                                                   .get_num_rows = get_sections_count_callback,
+                                                   .get_num_rows = get_post_count_callback,
                                                    .get_cell_height = PBL_IF_ROUND_ELSE(get_cell_height_callback, NULL),
                                                    .draw_row = draw_post_row_handler,
                                                    .select_click = select_post_callback,
