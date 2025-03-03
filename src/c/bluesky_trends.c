@@ -113,13 +113,15 @@ static void draw_post_row_handler(GContext *ctx, const Layer *cell_layer, MenuIn
 static void draw_topic_header(GContext *ctx, const Layer *cell_layer, uint16_t section_index,
                               void *callback_context)
 {
-  menu_cell_basic_header_draw(ctx, cell_layer, "Trending");
+  menu_cell_basic_header_draw(ctx, cell_layer, PBL_IF_ROUND_ELSE("     Trending", "Trending"));
 }
 
 static void draw_feed_header(GContext *ctx, const Layer *cell_layer, uint16_t section_index,
                              void *callback_context)
 {
-  menu_cell_basic_header_draw(ctx, cell_layer, topics[selected_feed].name);
+  char round_name[32] = "     ";
+  strcat(round_name, topics[selected_feed].name);
+  menu_cell_basic_header_draw(ctx, cell_layer, PBL_IF_ROUND_ELSE(round_name, topics[selected_feed].name));
 }
 
 static int16_t get_header_height(MenuLayer *menu_layer, uint16_t section_index, void *data)
@@ -183,21 +185,26 @@ static void post_window_load(Window *window)
   s_post_layer = scroll_layer_create(bounds);
   scroll_layer_set_click_config_onto_window(s_post_layer, window);
 
-  s_handle_layer = text_layer_create(GRect(2, 0, bounds.size.w - 4, 40));
+  int x_padding = PBL_IF_ROUND_ELSE(10, 3);
+  int y_padding = PBL_IF_ROUND_ELSE(45, 0);
+
+  s_handle_layer = text_layer_create(GRect(x_padding, y_padding, bounds.size.w - x_padding * 2, 40));
   text_layer_set_text(s_handle_layer, posts[selected_post].handle);
   text_layer_set_background_color(s_handle_layer, GColorClear);
   text_layer_set_text_color(s_handle_layer, GColorBlack);
+  text_layer_set_text_alignment(s_handle_layer, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
   text_layer_set_font(s_handle_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
   scroll_layer_add_child(s_post_layer, text_layer_get_layer(s_handle_layer));
 
-  s_post_text_layer = text_layer_create(GRect(0, 30, bounds.size.w, 500));
+  s_post_text_layer = text_layer_create(GRect(x_padding, 40 + y_padding, bounds.size.w - x_padding * 2, 500));
   text_layer_set_text(s_post_text_layer, posts[selected_post].text);
   text_layer_set_background_color(s_post_text_layer, GColorClear);
   text_layer_set_text_color(s_post_text_layer, GColorBlack);
+  text_layer_set_text_alignment(s_post_text_layer, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
   text_layer_set_font(s_post_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
   scroll_layer_add_child(s_post_layer, text_layer_get_layer(s_post_text_layer));
 
-  scroll_layer_set_content_size(s_post_layer, GSize(bounds.size.w, 530));
+  scroll_layer_set_content_size(s_post_layer, GSize(bounds.size.w, 540 + y_padding));
   layer_add_child(window_layer, scroll_layer_get_layer(s_post_layer));
 }
 
