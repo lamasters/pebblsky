@@ -5,22 +5,26 @@
 
 static Window *s_topics_window;
 static MenuLayer *s_topic_layer;
+static TextLayer *s_topics_loaded;
 
 static Window *s_feed_window;
 static MenuLayer *s_feed_layer;
+static TextLayer *s_feed_loaded;
 
 static Window *s_post_window;
 static ScrollLayer *s_post_layer;
 static TextLayer *s_handle_layer;
 static TextLayer *s_post_text_layer;
 
-static char s_topic_text[32];
+static char s_topic_text[64];
 
 static int num_topics = 0;
 static int loaded_topics = 0;
 
 static int num_posts = 0;
 static int loaded_posts = 0;
+
+static char loaded_buffer[64];
 
 static char *feed_id;
 
@@ -29,14 +33,14 @@ static int selected_post;
 
 typedef struct Topic
 {
-  char name[32];
-  char id[32];
+  char name[64];
+  char id[64];
 } Topic;
 
 typedef struct Post
 {
-  char handle[64];
-  char text[352];
+  char handle[128];
+  char text[480];
 } Post;
 
 static Topic topics[MAX_TOPICS];
@@ -45,6 +49,7 @@ static Post posts[MAX_POSTS];
 static void select_feed_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index,
                                  void *callback_context)
 {
+  memset(loaded_buffer, 0, sizeof(loaded_buffer));
   loaded_posts = 0;
   for (int i = 0; i < MAX_POSTS; i++)
   {
@@ -146,10 +151,20 @@ static void topic_window_load(Window *window)
   menu_layer_set_click_config_onto_window(s_topic_layer, window);
   menu_layer_set_highlight_colors(s_topic_layer, GColorPictonBlue, GColorBlack);
   layer_add_child(window_layer, menu_layer_get_layer(s_topic_layer));
+  layer_set_hidden(menu_layer_get_layer(s_topic_layer), true);
+
+  s_topics_loaded = text_layer_create(GRect(0, bounds.size.h / 2 - 10, bounds.size.w, 20));
+  text_layer_set_text(s_topics_loaded, "");
+  text_layer_set_background_color(s_topics_loaded, GColorClear);
+  text_layer_set_text_color(s_topics_loaded, GColorBlack);
+  text_layer_set_text_alignment(s_topics_loaded, GTextAlignmentCenter);
+  text_layer_set_font(s_topics_loaded, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  layer_add_child(window_layer, text_layer_get_layer(s_topics_loaded));
 }
 
 static void topic_window_unload(Window *window)
 {
+  text_layer_destroy(s_topics_loaded);
   menu_layer_destroy(s_topic_layer);
 }
 
@@ -170,10 +185,21 @@ static void feed_window_load(Window *window)
   menu_layer_set_click_config_onto_window(s_feed_layer, window);
   menu_layer_set_highlight_colors(s_feed_layer, GColorPictonBlue, GColorBlack);
   layer_add_child(window_layer, menu_layer_get_layer(s_feed_layer));
+  layer_set_hidden(menu_layer_get_layer(s_feed_layer), true);
+
+  s_feed_loaded = text_layer_create(GRect(0, bounds.size.h / 2 - 10, bounds.size.w, 20));
+  text_layer_set_text(s_feed_loaded, "");
+  text_layer_set_background_color(s_feed_loaded, GColorClear);
+  text_layer_set_text_color(s_feed_loaded, GColorBlack);
+  text_layer_set_text_alignment(s_feed_loaded, GTextAlignmentCenter);
+  text_layer_set_font(s_feed_loaded, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  layer_add_child(window_layer, text_layer_get_layer(s_feed_loaded));
+  layer_set_hidden(text_layer_get_layer(s_feed_loaded), true);
 }
 
 static void feed_window_unload(Window *window)
 {
+  text_layer_destroy(s_feed_loaded);
   menu_layer_destroy(s_feed_layer);
 }
 
@@ -242,10 +268,15 @@ static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
     topics[loaded_topics].id[sizeof(topics[loaded_topics].id) - 1] = '\0';
     loaded_topics++;
 
+    snprintf(loaded_buffer, sizeof(loaded_buffer), "Loaded %d/%d", loaded_topics, num_topics);
+    text_layer_set_text(s_topics_loaded, loaded_buffer);
+
     if (num_topics == loaded_topics)
     {
       APP_LOG(APP_LOG_LEVEL_DEBUG, "Reloading menu");
       menu_layer_reload_data(s_topic_layer);
+      layer_set_hidden(menu_layer_get_layer(s_topic_layer), false);
+      layer_set_hidden(text_layer_get_layer(s_topics_loaded), true);
     }
   }
   else if (strcmp(msg_type->value->cstring, "post-count") == 0)
@@ -266,10 +297,16 @@ static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
     posts[loaded_posts].text[sizeof(posts[loaded_posts].text) - 1] = '\0';
     loaded_posts++;
 
+    snprintf(loaded_buffer, sizeof(loaded_buffer), "Loaded %d/%d", loaded_posts, num_posts);
+    text_layer_set_text(s_feed_loaded, loaded_buffer);
+    layer_set_hidden(text_layer_get_layer(s_feed_loaded), false);
+
     if (num_posts == loaded_posts)
     {
       APP_LOG(APP_LOG_LEVEL_DEBUG, "Reloading feed");
       menu_layer_reload_data(s_feed_layer);
+      layer_set_hidden(menu_layer_get_layer(s_feed_layer), false);
+      layer_set_hidden(text_layer_get_layer(s_feed_loaded), true);
     }
   }
 }
