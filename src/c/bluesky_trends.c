@@ -1,7 +1,15 @@
 #include <pebble.h>
 
 #define MAX_TOPICS 10
-#define MAX_POSTS 10
+#define MAX_POSTS 25
+#define MAX_FEEDS 15
+
+static Window *s_sections_window;
+static MenuLayer *s_sections_layer;
+
+static Window *s_user_feeds_window;
+static MenuLayer *s_user_feeds_layer;
+static TextLayer *s_user_feeds_loaded;
 
 static Window *s_topics_window;
 static MenuLayer *s_topic_layer;
@@ -16,7 +24,12 @@ static ScrollLayer *s_post_layer;
 static TextLayer *s_handle_layer;
 static TextLayer *s_post_text_layer;
 
+static char s_user_feed_text[64];
+
 static char s_topic_text[64];
+
+static int num_user_feeds = 0;
+static int loaded_user_feeds = 0;
 
 static int num_topics = 0;
 static int loaded_topics = 0;
@@ -31,23 +44,79 @@ static char *feed_id;
 static int selected_feed;
 static int selected_post;
 
-typedef struct Topic
+typedef struct Feed
 {
   char name[64];
   char id[64];
-} Topic;
+} Feed;
 
 typedef struct Post
 {
-  char handle[128];
-  char text[480];
+  char handle[64];
+  char text[352];
 } Post;
 
-static Topic topics[MAX_TOPICS];
+static Feed user_feeds[MAX_FEEDS];
+static Feed topics[MAX_TOPICS];
 static Post posts[MAX_POSTS];
 
-static void select_feed_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index,
-                                 void *callback_context)
+static void select_section_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index, void *callback_context)
+{
+  memset(loaded_buffer, 0, sizeof(loaded_buffer));
+  if (cell_index->row == 0)
+  {
+    loaded_topics = 0;
+    for (int i = 0; i < MAX_TOPICS; i++)
+    {
+      memset(topics[i].name, 0, sizeof(topics[i].name));
+      memset(topics[i].id, 0, sizeof(topics[i].id));
+    }
+    window_stack_push(s_topics_window, true);
+
+    DictionaryIterator *iter;
+    app_message_outbox_begin(&iter);
+    dict_write_cstring(iter, MESSAGE_KEY_MessageType, "topics");
+    app_message_outbox_send();
+  }
+  else if (cell_index->row == 1)
+  {
+    loaded_user_feeds = 0;
+    for (int i = 0; i < MAX_FEEDS; i++)
+    {
+      memset(user_feeds[i].name, 0, sizeof(user_feeds[i].name));
+      memset(user_feeds[i].id, 0, sizeof(user_feeds[i].id));
+    }
+    window_stack_push(s_user_feeds_window, true);
+
+    DictionaryIterator *iter;
+    app_message_outbox_begin(&iter);
+    dict_write_cstring(iter, MESSAGE_KEY_MessageType, "user-feeds");
+    app_message_outbox_send();
+  }
+}
+
+static void select_user_feed_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index, void *callback_context)
+{
+  memset(loaded_buffer, 0, sizeof(loaded_buffer));
+  loaded_posts = 0;
+  for (int i = 0; i < MAX_POSTS; i++)
+  {
+    memset(posts[i].handle, 0, sizeof(posts[i].handle));
+    memset(posts[i].text, 0, sizeof(posts[i].text));
+  }
+  feed_id = user_feeds[cell_index->row].id;
+  selected_feed = cell_index->row;
+  window_stack_push(s_feed_window, true);
+
+  DictionaryIterator *iter;
+  app_message_outbox_begin(&iter);
+  dict_write_cstring(iter, MESSAGE_KEY_MessageType, "feed");
+  dict_write_cstring(iter, MESSAGE_KEY_FeedId, feed_id);
+  app_message_outbox_send();
+}
+
+static void select_trending_feed_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index,
+                                          void *callback_context)
 {
   memset(loaded_buffer, 0, sizeof(loaded_buffer));
   loaded_posts = 0;
@@ -58,11 +127,11 @@ static void select_feed_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell
   }
   feed_id = topics[cell_index->row].id;
   selected_feed = cell_index->row;
-  window_stack_push(s_feed_window, false);
+  window_stack_push(s_feed_window, true);
 
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
-  dict_write_cstring(iter, MESSAGE_KEY_MessageType, "feed");
+  dict_write_cstring(iter, MESSAGE_KEY_MessageType, "topic");
   dict_write_cstring(iter, MESSAGE_KEY_TopicId, feed_id);
   app_message_outbox_send();
 }
@@ -71,7 +140,18 @@ static void select_post_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell
                                  void *callback_context)
 {
   selected_post = cell_index->row;
-  window_stack_push(s_post_window, false);
+  window_stack_push(s_post_window, true);
+}
+
+static uint16_t get_sections_count_callback(struct MenuLayer *s_menu_layer, uint16_t section_index, void *callback_context)
+{
+  return 2;
+}
+
+static uint16_t get_user_feeds_count_callback(struct MenuLayer *menulayer, uint16_t section_index,
+                                              void *callback_context)
+{
+  return num_user_feeds;
 }
 
 static uint16_t get_topics_count_callback(struct MenuLayer *menulayer, uint16_t section_index,
@@ -94,6 +174,28 @@ static int16_t get_cell_height_callback(MenuLayer *menu_layer, MenuIndex *cell_i
 }
 #endif
 
+static void draw_section_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
+                                     void *callback_context)
+{
+  if (cell_index->row == 0)
+  {
+    menu_cell_basic_draw(ctx, cell_layer, "Trending", NULL, NULL);
+  }
+  else if (cell_index->row == 1)
+  {
+    menu_cell_basic_draw(ctx, cell_layer, "My Feeds", NULL, NULL);
+  }
+}
+
+static void draw_user_feed_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
+                                       void *callback_context)
+{
+  char *name = user_feeds[cell_index->row].name;
+
+  snprintf(s_user_feed_text, sizeof(s_user_feed_text), "%s", name);
+  menu_cell_basic_draw(ctx, cell_layer, name, NULL, NULL);
+}
+
 static void draw_trend_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
                                    void *callback_context)
 {
@@ -115,6 +217,18 @@ static void draw_post_row_handler(GContext *ctx, const Layer *cell_layer, MenuIn
   menu_cell_basic_draw(ctx, cell_layer, preview, handle, NULL);
 }
 
+static void draw_section_header(GContext *ctx, const Layer *cell_layer, uint16_t section_index,
+                                void *callback_context)
+{
+  menu_cell_basic_header_draw(ctx, cell_layer, PBL_IF_ROUND_ELSE("     Pebblsky", "Pebblsky"));
+}
+
+static void draw_user_feeds_header(GContext *ctx, const Layer *cell_layer, uint16_t section_index,
+                                   void *callback_context)
+{
+  menu_cell_basic_header_draw(ctx, cell_layer, PBL_IF_ROUND_ELSE("     My Feeds", "My Feeds"));
+}
+
 static void draw_topic_header(GContext *ctx, const Layer *cell_layer, uint16_t section_index,
                               void *callback_context)
 {
@@ -134,6 +248,64 @@ static int16_t get_header_height(MenuLayer *menu_layer, uint16_t section_index, 
   return 16;
 }
 
+static void sections_window_load(Window *window)
+{
+  Layer *window_layer = window_get_root_layer(window);
+  GRect bounds = layer_get_bounds(window_layer);
+
+  s_sections_layer = menu_layer_create(bounds);
+  menu_layer_set_callbacks(s_sections_layer, NULL, (MenuLayerCallbacks){
+                                                       .get_num_rows = get_sections_count_callback,
+                                                       .get_cell_height = PBL_IF_ROUND_ELSE(get_cell_height_callback, NULL),
+                                                       .draw_row = draw_section_row_handler,
+                                                       .select_click = select_section_callback,
+                                                       .draw_header = draw_section_header,
+                                                       .get_header_height = get_header_height,
+                                                   });
+  menu_layer_set_click_config_onto_window(s_sections_layer, window);
+  menu_layer_set_highlight_colors(s_sections_layer, GColorPictonBlue, GColorBlack);
+  layer_add_child(window_layer, menu_layer_get_layer(s_sections_layer));
+}
+
+static void sections_window_unload(Window *window)
+{
+  menu_layer_destroy(s_sections_layer);
+}
+
+static void user_feeds_window_load(Window *window)
+{
+  Layer *window_layer = window_get_root_layer(window);
+  GRect bounds = layer_get_bounds(window_layer);
+
+  s_user_feeds_layer = menu_layer_create(bounds);
+  menu_layer_set_callbacks(s_user_feeds_layer, NULL, (MenuLayerCallbacks){
+                                                         .get_num_rows = get_user_feeds_count_callback,
+                                                         .get_cell_height = PBL_IF_ROUND_ELSE(get_cell_height_callback, NULL),
+                                                         .draw_row = draw_user_feed_row_handler,
+                                                         .select_click = select_user_feed_callback,
+                                                         .draw_header = draw_user_feeds_header,
+                                                         .get_header_height = get_header_height,
+                                                     });
+  menu_layer_set_click_config_onto_window(s_user_feeds_layer, window);
+  menu_layer_set_highlight_colors(s_user_feeds_layer, GColorPictonBlue, GColorBlack);
+  layer_add_child(window_layer, menu_layer_get_layer(s_user_feeds_layer));
+  layer_set_hidden(menu_layer_get_layer(s_user_feeds_layer), true);
+
+  s_user_feeds_loaded = text_layer_create(GRect(0, bounds.size.h / 2 - 10, bounds.size.w, 20));
+  text_layer_set_text(s_user_feeds_loaded, "Loading session");
+  text_layer_set_background_color(s_user_feeds_loaded, GColorClear);
+  text_layer_set_text_color(s_user_feeds_loaded, GColorBlack);
+  text_layer_set_text_alignment(s_user_feeds_loaded, GTextAlignmentCenter);
+  text_layer_set_font(s_user_feeds_loaded, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  layer_add_child(window_layer, text_layer_get_layer(s_user_feeds_loaded));
+}
+
+static void user_feeds_window_unload(Window *window)
+{
+  text_layer_destroy(s_user_feeds_loaded);
+  menu_layer_destroy(s_user_feeds_layer);
+}
+
 static void topic_window_load(Window *window)
 {
   Layer *window_layer = window_get_root_layer(window);
@@ -144,7 +316,7 @@ static void topic_window_load(Window *window)
                                                     .get_num_rows = get_topics_count_callback,
                                                     .get_cell_height = PBL_IF_ROUND_ELSE(get_cell_height_callback, NULL),
                                                     .draw_row = draw_trend_row_handler,
-                                                    .select_click = select_feed_callback,
+                                                    .select_click = select_trending_feed_callback,
                                                     .draw_header = draw_topic_header,
                                                     .get_header_height = get_header_height,
                                                 });
@@ -160,6 +332,7 @@ static void topic_window_load(Window *window)
   text_layer_set_text_alignment(s_topics_loaded, GTextAlignmentCenter);
   text_layer_set_font(s_topics_loaded, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
   layer_add_child(window_layer, text_layer_get_layer(s_topics_loaded));
+  layer_set_hidden(text_layer_get_layer(s_topics_loaded), true);
 }
 
 static void topic_window_unload(Window *window)
@@ -254,6 +427,10 @@ static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
   {
     Tuple *count_tuple = dict_find(iterator, MESSAGE_KEY_Count);
     num_topics = count_tuple->value->int32;
+    if (num_topics > MAX_TOPICS)
+    {
+      num_topics = MAX_TOPICS;
+    }
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Total topics: %d", num_topics);
   }
   else if (strcmp(msg_type->value->cstring, "topics") == 0)
@@ -270,6 +447,7 @@ static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
 
     snprintf(loaded_buffer, sizeof(loaded_buffer), "Loaded %d/%d", loaded_topics, num_topics);
     text_layer_set_text(s_topics_loaded, loaded_buffer);
+    layer_set_hidden(text_layer_get_layer(s_topics_loaded), false);
 
     if (num_topics == loaded_topics)
     {
@@ -283,7 +461,10 @@ static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
   {
     Tuple *count_tuple = dict_find(iterator, MESSAGE_KEY_Count);
     num_posts = count_tuple->value->int32;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Total posts: %d", num_posts);
+    if (num_posts > MAX_POSTS)
+    {
+      num_posts = MAX_POSTS;
+    }
   }
   else if (strcmp(msg_type->value->cstring, "posts") == 0)
   {
@@ -309,6 +490,48 @@ static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
       layer_set_hidden(text_layer_get_layer(s_feed_loaded), true);
     }
   }
+  else if (strcmp(msg_type->value->cstring, "feed-count") == 0)
+  {
+    Tuple *count_tuple = dict_find(iterator, MESSAGE_KEY_Count);
+    num_user_feeds = count_tuple->value->int32;
+    if (num_user_feeds > MAX_FEEDS)
+    {
+      num_user_feeds = MAX_FEEDS;
+    }
+  }
+  else if (strcmp(msg_type->value->cstring, "feeds") == 0)
+  {
+    Tuple *name_tuple = dict_find(iterator, MESSAGE_KEY_FeedName);
+    Tuple *id_tuple = dict_find(iterator, MESSAGE_KEY_FeedId);
+    char *name = name_tuple->value->cstring;
+    char *id = id_tuple->value->cstring;
+    strncpy(user_feeds[loaded_user_feeds].name, name, sizeof(user_feeds[loaded_user_feeds].name) - 1);
+    user_feeds[loaded_user_feeds].name[sizeof(user_feeds[loaded_user_feeds].name) - 1] = '\0';
+    strncpy(user_feeds[loaded_user_feeds].id, id, sizeof(user_feeds[loaded_user_feeds].id) - 1);
+    user_feeds[loaded_user_feeds].id[sizeof(user_feeds[loaded_user_feeds].id) - 1] = '\0';
+    loaded_user_feeds++;
+
+    snprintf(loaded_buffer, sizeof(loaded_buffer), "Loaded %d/%d", loaded_user_feeds, num_user_feeds);
+    text_layer_set_text(s_user_feeds_loaded, loaded_buffer);
+    layer_set_hidden(text_layer_get_layer(s_user_feeds_loaded), false);
+
+    if (num_user_feeds == loaded_user_feeds)
+    {
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Reloading menu");
+      menu_layer_reload_data(s_user_feeds_layer);
+      layer_set_hidden(menu_layer_get_layer(s_user_feeds_layer), false);
+      layer_set_hidden(text_layer_get_layer(s_user_feeds_loaded), true);
+    }
+  }
+  else if (strcmp(msg_type->value->cstring, "session-error") == 0)
+  {
+    Tuple *error_tuple = dict_find(iterator, MESSAGE_KEY_Error);
+    strncpy(loaded_buffer, error_tuple->value->cstring, sizeof(loaded_buffer) - 1);
+    loaded_buffer[sizeof(loaded_buffer) - 1] = '\0';
+    text_layer_set_text(s_user_feeds_loaded, loaded_buffer);
+    layer_set_hidden(menu_layer_get_layer(s_user_feeds_layer), true);
+    layer_set_hidden(text_layer_get_layer(s_user_feeds_loaded), false);
+  }
 }
 
 static void inbox_drop_callback(AppMessageResult reason, void *context)
@@ -328,11 +551,21 @@ static void outbox_sent_callback(DictionaryIterator *iterator, void *context)
 
 static void init(void)
 {
+  s_sections_window = window_create();
+  window_set_window_handlers(s_sections_window, (WindowHandlers){
+                                                    .load = sections_window_load,
+                                                    .unload = sections_window_unload,
+                                                });
   s_topics_window = window_create();
   window_set_window_handlers(s_topics_window, (WindowHandlers){
                                                   .load = topic_window_load,
                                                   .unload = topic_window_unload,
                                               });
+  s_user_feeds_window = window_create();
+  window_set_window_handlers(s_user_feeds_window, (WindowHandlers){
+                                                      .load = user_feeds_window_load,
+                                                      .unload = user_feeds_window_unload,
+                                                  });
   s_feed_window = window_create();
   window_set_window_handlers(s_feed_window, (WindowHandlers){
                                                 .load = feed_window_load,
@@ -344,7 +577,7 @@ static void init(void)
                                                 .unload = post_window_unload,
                                             });
 
-  window_stack_push(s_topics_window, false);
+  window_stack_push(s_sections_window, false);
 
   app_message_register_inbox_received(inbox_recv_callback);
   app_message_register_inbox_dropped(inbox_drop_callback);
@@ -358,6 +591,8 @@ static void init(void)
 
 static void deinit(void)
 {
+  window_destroy(s_sections_window);
+  window_destroy(s_user_feeds_window);
   window_destroy(s_topics_window);
   window_destroy(s_feed_window);
   window_destroy(s_post_window);

@@ -2,6 +2,9 @@
   "name": "pebblsky",
   "author": "Liam Masters",
   "version": "1.5",
+  "dependencies": {
+    "pebble-clay": "^1.0.4"
+  },
   "pebble": {
     "displayName": "Pebblsky",
     "uuid": "d97cb00a-931d-4502-a89f-3fcaf1fb515c",
@@ -32,7 +35,13 @@
       "TopicName",
       "TopicId",
       "PostHandle",
-      "PostText"
+      "PostText",
+      "FeedName",
+      "FeedId",
+      "UserHandle",
+      "Password",
+      "Error",
+      "Limit"
     ]
   }
 }
