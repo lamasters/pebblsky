@@ -206,7 +206,6 @@ function createSession() {
       password: password,
     })
   );
-  console.log(xhr.responseText);
   if (!xhr.responseText) {
     console.log("No session created");
     sendMessage([

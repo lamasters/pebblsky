@@ -291,8 +291,8 @@ static void user_feeds_window_load(Window *window)
   layer_add_child(window_layer, menu_layer_get_layer(s_user_feeds_layer));
   layer_set_hidden(menu_layer_get_layer(s_user_feeds_layer), true);
 
-  s_user_feeds_loaded = text_layer_create(GRect(0, bounds.size.h / 2 - 10, bounds.size.w, 20));
-  text_layer_set_text(s_user_feeds_loaded, "Loading session");
+  s_user_feeds_loaded = text_layer_create(GRect(0, bounds.size.h / 2 - 20, bounds.size.w, 40));
+  text_layer_set_text(s_user_feeds_loaded, "Catching butterflies...");
   text_layer_set_background_color(s_user_feeds_loaded, GColorClear);
   text_layer_set_text_color(s_user_feeds_loaded, GColorBlack);
   text_layer_set_text_alignment(s_user_feeds_loaded, GTextAlignmentCenter);
