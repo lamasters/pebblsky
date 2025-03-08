@@ -1,7 +1,7 @@
 {
   "name": "pebblsky",
   "author": "Liam Masters",
-  "version": "1.6",
+  "version": "1.7",
   "dependencies": {
     "pebble-clay": "^1.0.4"
   },
