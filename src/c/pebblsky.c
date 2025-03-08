@@ -23,6 +23,10 @@ static Window *s_post_window;
 static ScrollLayer *s_post_layer;
 static TextLayer *s_handle_layer;
 static TextLayer *s_post_text_layer;
+static TextLayer *s_name_layer;
+static TextLayer *s_time_layer;
+
+char time_buffer[24];
 
 static char s_user_feed_text[64];
 
@@ -52,8 +56,10 @@ typedef struct Feed
 
 typedef struct Post
 {
+  char name[64];
   char handle[64];
   char text[352];
+  int seconds_ago;
 } Post;
 
 static Feed user_feeds[MAX_FEEDS];
@@ -97,12 +103,18 @@ static void select_section_callback(struct MenuLayer *s_menu_layer, MenuIndex *c
 
 static void select_user_feed_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index, void *callback_context)
 {
+  if (num_user_feeds == 0 || num_user_feeds != loaded_user_feeds)
+  {
+    return;
+  }
   memset(loaded_buffer, 0, sizeof(loaded_buffer));
   loaded_posts = 0;
   for (int i = 0; i < MAX_POSTS; i++)
   {
     memset(posts[i].handle, 0, sizeof(posts[i].handle));
     memset(posts[i].text, 0, sizeof(posts[i].text));
+    memset(posts[i].name, 0, sizeof(posts[i].name));
+    posts[i].seconds_ago = 0;
   }
   feed_id = user_feeds[cell_index->row].id;
   selected_feed = cell_index->row;
@@ -118,12 +130,18 @@ static void select_user_feed_callback(struct MenuLayer *s_menu_layer, MenuIndex 
 static void select_trending_feed_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index,
                                           void *callback_context)
 {
+  if (num_topics == 0 || num_topics != loaded_topics)
+  {
+    return;
+  }
   memset(loaded_buffer, 0, sizeof(loaded_buffer));
   loaded_posts = 0;
   for (int i = 0; i < MAX_POSTS; i++)
   {
     memset(posts[i].handle, 0, sizeof(posts[i].handle));
     memset(posts[i].text, 0, sizeof(posts[i].text));
+    memset(posts[i].name, 0, sizeof(posts[i].name));
+    posts[i].seconds_ago = 0;
   }
   feed_id = topics[cell_index->row].id;
   selected_feed = cell_index->row;
@@ -139,7 +157,28 @@ static void select_trending_feed_callback(struct MenuLayer *s_menu_layer, MenuIn
 static void select_post_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index,
                                  void *callback_context)
 {
+  if (num_posts == 0 || num_posts != loaded_posts)
+  {
+    return;
+  }
+  memset(time_buffer, 0, sizeof(time_buffer));
   selected_post = cell_index->row;
+  if (posts[selected_post].seconds_ago < 60)
+  {
+    snprintf(time_buffer, sizeof(time_buffer), "Just now");
+  }
+  else if (posts[selected_post].seconds_ago < 3600)
+  {
+    snprintf(time_buffer, sizeof(time_buffer), "%d minutes ago", posts[selected_post].seconds_ago / 60);
+  }
+  else if (posts[selected_post].seconds_ago < 86400)
+  {
+    snprintf(time_buffer, sizeof(time_buffer), "%d hours ago", posts[selected_post].seconds_ago / 3600);
+  }
+  else
+  {
+    snprintf(time_buffer, sizeof(time_buffer), "%d days ago", posts[selected_post].seconds_ago / 86400);
+  }
   window_stack_push(s_post_window, true);
 }
 
@@ -385,30 +424,61 @@ static void post_window_load(Window *window)
   scroll_layer_set_click_config_onto_window(s_post_layer, window);
 
   int x_padding = PBL_IF_ROUND_ELSE(10, 3);
-  int y_padding = PBL_IF_ROUND_ELSE(45, 0);
+  int y_padding = PBL_IF_ROUND_ELSE(40, 2);
 
-  s_handle_layer = text_layer_create(GRect(x_padding, y_padding, bounds.size.w - x_padding * 2, 40));
+  int total_height = y_padding;
+  s_name_layer = text_layer_create(GRect(x_padding, y_padding, bounds.size.w - x_padding * 2, 40));
+  text_layer_set_text(s_name_layer, posts[selected_post].name);
+  text_layer_set_background_color(s_name_layer, GColorClear);
+  text_layer_set_text_color(s_name_layer, GColorBlack);
+  text_layer_set_text_alignment(s_name_layer, GTextAlignmentCenter);
+  text_layer_set_font(s_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  scroll_layer_add_child(s_post_layer, text_layer_get_layer(s_name_layer));
+  GSize name_bounds = text_layer_get_content_size(s_name_layer);
+  text_layer_set_size(s_name_layer, (GSize){.h = name_bounds.h + 2, .w = bounds.size.w - x_padding * 2});
+  total_height += name_bounds.h + 2;
+
+  s_handle_layer = text_layer_create(GRect(x_padding, total_height, bounds.size.w - x_padding * 2, 40));
   text_layer_set_text(s_handle_layer, posts[selected_post].handle);
   text_layer_set_background_color(s_handle_layer, GColorClear);
   text_layer_set_text_color(s_handle_layer, GColorBlack);
-  text_layer_set_text_alignment(s_handle_layer, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
-  text_layer_set_font(s_handle_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_text_alignment(s_handle_layer, GTextAlignmentCenter);
+  text_layer_set_font(s_handle_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
   scroll_layer_add_child(s_post_layer, text_layer_get_layer(s_handle_layer));
+  GSize handle_bounds = text_layer_get_content_size(s_handle_layer);
+  text_layer_set_size(s_handle_layer, (GSize){.h = handle_bounds.h + 2, .w = bounds.size.w - x_padding * 2});
+  total_height += handle_bounds.h + 2;
 
-  s_post_text_layer = text_layer_create(GRect(x_padding, 40 + y_padding, bounds.size.w - x_padding * 2, 500));
+  s_time_layer = text_layer_create(GRect(x_padding, total_height, bounds.size.w - x_padding * 2, 40));
+  text_layer_set_text(s_time_layer, time_buffer);
+  text_layer_set_background_color(s_time_layer, GColorClear);
+  text_layer_set_text_color(s_time_layer, GColorBlack);
+  text_layer_set_text_alignment(s_time_layer, GTextAlignmentCenter);
+  text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  scroll_layer_add_child(s_post_layer, text_layer_get_layer(s_time_layer));
+  GSize time_bounds = text_layer_get_content_size(s_time_layer);
+  text_layer_set_size(s_time_layer, (GSize){.h = time_bounds.h + 2, .w = bounds.size.w - x_padding * 2});
+  total_height += time_bounds.h + 2;
+
+  s_post_text_layer = text_layer_create(GRect(x_padding, total_height, bounds.size.w - x_padding * 2, 500));
   text_layer_set_text(s_post_text_layer, posts[selected_post].text);
   text_layer_set_background_color(s_post_text_layer, GColorClear);
   text_layer_set_text_color(s_post_text_layer, GColorBlack);
   text_layer_set_text_alignment(s_post_text_layer, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
   text_layer_set_font(s_post_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
   scroll_layer_add_child(s_post_layer, text_layer_get_layer(s_post_text_layer));
+  GSize text_bounds = text_layer_get_content_size(s_post_text_layer);
+  text_layer_set_size(s_post_text_layer, (GSize){.h = text_bounds.h + 2, .w = bounds.size.w - x_padding * 2});
+  total_height += text_bounds.h + 2;
 
-  scroll_layer_set_content_size(s_post_layer, GSize(bounds.size.w, 540 + y_padding));
+  scroll_layer_set_content_size(s_post_layer, GSize(bounds.size.w, total_height + y_padding));
   layer_add_child(window_layer, scroll_layer_get_layer(s_post_layer));
 }
 
 static void post_window_unload(Window *window)
 {
+  text_layer_destroy(s_name_layer);
+  text_layer_destroy(s_time_layer);
   text_layer_destroy(s_handle_layer);
   text_layer_destroy(s_post_text_layer);
   scroll_layer_destroy(s_post_layer);
@@ -470,12 +540,18 @@ static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
   {
     Tuple *handle_tuple = dict_find(iterator, MESSAGE_KEY_PostHandle);
     Tuple *text_tuple = dict_find(iterator, MESSAGE_KEY_PostText);
+    Tuple *name_tuple = dict_find(iterator, MESSAGE_KEY_PostName);
+    Tuple *seconds_ago_tuple = dict_find(iterator, MESSAGE_KEY_PostTime);
     char *handle = handle_tuple->value->cstring;
     char *text = text_tuple->value->cstring;
+    char *name = name_tuple->value->cstring;
     strncpy(posts[loaded_posts].handle, handle, sizeof(posts[loaded_posts].handle) - 1);
     posts[loaded_posts].handle[sizeof(posts[loaded_posts].handle) - 1] = '\0';
     strncpy(posts[loaded_posts].text, text, sizeof(posts[loaded_posts].text) - 1);
     posts[loaded_posts].text[sizeof(posts[loaded_posts].text) - 1] = '\0';
+    strncpy(posts[loaded_posts].name, name, sizeof(posts[loaded_posts].name) - 1);
+    posts[loaded_posts].name[sizeof(posts[loaded_posts].name) - 1] = '\0';
+    posts[loaded_posts].seconds_ago = seconds_ago_tuple->value->int32;
     loaded_posts++;
 
     snprintf(loaded_buffer, sizeof(loaded_buffer), "Loaded %d/%d", loaded_posts, num_posts);

@@ -48,10 +48,15 @@ function fetchFeed(feed_id) {
   var response = JSON.parse(xhr.responseText);
   var messages = [{ MessageType: "post-count", Count: response.feed.length }];
   response.feed.forEach(function (item) {
+    var secondsSincePost = Math.floor(
+      (Date.now() - new Date(item.post.record.createdAt)) / 1000
+    );
     messages.push({
       MessageType: "posts",
+      PostName: item.post.author.displayName,
       PostHandle: item.post.author.handle,
       PostText: item.post.record.text,
+      PostTime: secondsSincePost,
     });
   });
   sendMessage(messages);
@@ -157,10 +162,15 @@ function fetchTrendingFeed(feed_id) {
     var response = JSON.parse(xhr.responseText);
     var messages = [{ MessageType: "post-count", Count: response.feed.length }];
     response.feed.forEach(function (item) {
+      var secondsSincePost = Math.floor(
+        (Date.now() - new Date(item.post.record.createdAt)) / 1000
+      );
       messages.push({
         MessageType: "posts",
+        PostName: item.post.author.displayName,
         PostHandle: item.post.author.handle,
         PostText: item.post.record.text,
+        PostTime: secondsSincePost,
       });
     });
     sendMessage(messages);
