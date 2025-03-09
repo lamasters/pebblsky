@@ -51,6 +51,18 @@ function fetchFeed(feed_id) {
     var secondsSincePost = Math.floor(
       (Date.now() - new Date(item.post.record.createdAt)) / 1000
     );
+
+    // Filter empty posts without any text (just a picture, for example)
+    if (item.post.record.text == "") {
+      return;
+    }
+
+    // Filter out replies:
+    if (item.reply || ((item.post && item.post.record && item.post.record.reply)) {
+      // `reply` object exists => this is a reply
+      return;
+    }
+    
     messages.push({
       MessageType: "posts",
       PostName: item.post.author.displayName,
