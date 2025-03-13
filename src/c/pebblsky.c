@@ -1,8 +1,8 @@
 #include <pebble.h>
 
 #define MAX_TOPICS 10
-#define MAX_POSTS 25
 #define MAX_FEEDS 15
+#define MAX_POSTS PBL_PLATFORM_SWITCH_DEFAULT(PBL_PLATFORM_TYPE_CURRENT, 15, 15, 25, 25, 25, 25)
 
 static Window *s_sections_window;
 static MenuLayer *s_sections_layer;
@@ -58,7 +58,7 @@ typedef struct Post
 {
   char name[64];
   char handle[64];
-  char text[352];
+  char text[448];
   int seconds_ago;
 } Post;
 
@@ -109,13 +109,6 @@ static void select_user_feed_callback(struct MenuLayer *s_menu_layer, MenuIndex 
   }
   memset(loaded_buffer, 0, sizeof(loaded_buffer));
   loaded_posts = 0;
-  for (int i = 0; i < MAX_POSTS; i++)
-  {
-    memset(posts[i].handle, 0, sizeof(posts[i].handle));
-    memset(posts[i].text, 0, sizeof(posts[i].text));
-    memset(posts[i].name, 0, sizeof(posts[i].name));
-    posts[i].seconds_ago = 0;
-  }
   feed_id = user_feeds[cell_index->row].id;
   selected_feed = cell_index->row;
   window_stack_push(s_feed_window, true);
@@ -302,7 +295,7 @@ static void sections_window_load(Window *window)
                                                        .get_header_height = get_header_height,
                                                    });
   menu_layer_set_click_config_onto_window(s_sections_layer, window);
-  menu_layer_set_highlight_colors(s_sections_layer, GColorPictonBlue, GColorBlack);
+  menu_layer_set_highlight_colors(s_sections_layer, PBL_IF_BW_ELSE(GColorBlack, GColorPictonBlue), PBL_IF_BW_ELSE(GColorWhite, GColorBlack));
   layer_add_child(window_layer, menu_layer_get_layer(s_sections_layer));
 }
 
@@ -326,7 +319,7 @@ static void user_feeds_window_load(Window *window)
                                                          .get_header_height = get_header_height,
                                                      });
   menu_layer_set_click_config_onto_window(s_user_feeds_layer, window);
-  menu_layer_set_highlight_colors(s_user_feeds_layer, GColorPictonBlue, GColorBlack);
+  menu_layer_set_highlight_colors(s_user_feeds_layer, PBL_IF_BW_ELSE(GColorBlack, GColorPictonBlue), PBL_IF_BW_ELSE(GColorWhite, GColorBlack));
   layer_add_child(window_layer, menu_layer_get_layer(s_user_feeds_layer));
   layer_set_hidden(menu_layer_get_layer(s_user_feeds_layer), true);
 
@@ -360,7 +353,7 @@ static void topic_window_load(Window *window)
                                                     .get_header_height = get_header_height,
                                                 });
   menu_layer_set_click_config_onto_window(s_topic_layer, window);
-  menu_layer_set_highlight_colors(s_topic_layer, GColorPictonBlue, GColorBlack);
+  menu_layer_set_highlight_colors(s_topic_layer, PBL_IF_BW_ELSE(GColorBlack, GColorPictonBlue), PBL_IF_BW_ELSE(GColorWhite, GColorBlack));
   layer_add_child(window_layer, menu_layer_get_layer(s_topic_layer));
   layer_set_hidden(menu_layer_get_layer(s_topic_layer), true);
 
@@ -395,7 +388,7 @@ static void feed_window_load(Window *window)
                                                    .get_header_height = get_header_height,
                                                });
   menu_layer_set_click_config_onto_window(s_feed_layer, window);
-  menu_layer_set_highlight_colors(s_feed_layer, GColorPictonBlue, GColorBlack);
+  menu_layer_set_highlight_colors(s_feed_layer, PBL_IF_BW_ELSE(GColorBlack, GColorPictonBlue), PBL_IF_BW_ELSE(GColorWhite, GColorBlack));
   layer_add_child(window_layer, menu_layer_get_layer(s_feed_layer));
   layer_set_hidden(menu_layer_get_layer(s_feed_layer), true);
 
@@ -660,7 +653,7 @@ static void init(void)
   app_message_register_outbox_failed(outbox_fail_callback);
   app_message_register_outbox_sent(outbox_sent_callback);
 
-  const int inbox_size = 512;
+  const int inbox_size = 592;
   const int outbox_size = 128;
   app_message_open(inbox_size, outbox_size);
 }

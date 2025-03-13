@@ -11,7 +11,7 @@ function sendMessage(messages) {
       sendMessage(messages);
     },
     function (e) {
-      console.log("Error sending trending count to Pebble");
+      console.log("Error sending messages to Pebble");
     }
   );
 }
@@ -44,6 +44,7 @@ function fetchFeed(feed_id) {
   );
   xhr.setRequestHeader("Authorization", "Bearer " + token);
   xhr.setRequestHeader("Content-Type", "application/json");
+  console.log("Fetching feed: " + feed_uri);
   xhr.send();
   var response = JSON.parse(xhr.responseText);
   var messages = [];
@@ -75,7 +76,10 @@ function fetchFeed(feed_id) {
     });
   });
   messages.unshift({ MessageType: "post-count", Count: messages.length });
-  sendMessage(messages);
+  console.log("Got " + messages.length + " posts from feed");
+  if (messages.length > 0) {
+    sendMessage(messages);
+  }
   console.log("Feed items sent to Pebble successfully!");
 }
 
@@ -107,9 +111,11 @@ function getPinnedFeeds(send_to_watch) {
   );
   xhr.setRequestHeader("Authorization", "Bearer " + token);
   xhr.setRequestHeader("Content-Type", "application/json");
+  console.log("Fetching pinned feeds...");
   xhr.send();
 
   var response = JSON.parse(xhr.responseText);
+  console.log("Got user preferences");
   var pinnedFeeds;
   for (var preference of response.preferences) {
     if (preference.$type === "app.bsky.actor.defs#savedFeedsPrefV2") {
@@ -119,6 +125,7 @@ function getPinnedFeeds(send_to_watch) {
       break;
     }
   }
+  console.log("Got feeds: " + JSON.stringify(pinnedFeeds));
 
   var id_to_uri = {};
   var feedRes;
@@ -138,7 +145,7 @@ function getPinnedFeeds(send_to_watch) {
     }
   }
   messages.unshift({ MessageType: "feed-count", Count: numFeeds });
-  if (send_to_watch) {
+  if (send_to_watch && numFeeds > 0) {
     sendMessage(messages);
   } else {
     return id_to_uri;
