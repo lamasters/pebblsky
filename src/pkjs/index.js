@@ -46,7 +46,7 @@ function fetchFeed(feed_id) {
   xhr.setRequestHeader("Content-Type", "application/json");
   xhr.send();
   var response = JSON.parse(xhr.responseText);
-  var messages = [{ MessageType: "post-count", Count: response.feed.length }];
+  var messages = [];
   response.feed.forEach(function (item) {
     var secondsSincePost = Math.floor(
       (Date.now() - new Date(item.post.record.createdAt)) / 1000
@@ -58,11 +58,14 @@ function fetchFeed(feed_id) {
     }
 
     // Filter out replies:
-    if (item.reply || ((item.post && item.post.record && item.post.record.reply)) {
+    if (
+      item.reply ||
+      (item.post && item.post.record && item.post.record.reply)
+    ) {
       // `reply` object exists => this is a reply
       return;
     }
-    
+
     messages.push({
       MessageType: "posts",
       PostName: item.post.author.displayName,
@@ -71,6 +74,7 @@ function fetchFeed(feed_id) {
       PostTime: secondsSincePost,
     });
   });
+  messages.unshift({ MessageType: "post-count", Count: messages.length });
   sendMessage(messages);
   console.log("Feed items sent to Pebble successfully!");
 }
@@ -172,11 +176,25 @@ function fetchTrendingFeed(feed_id) {
   var xhr = new XMLHttpRequest();
   xhr.onload = function () {
     var response = JSON.parse(xhr.responseText);
-    var messages = [{ MessageType: "post-count", Count: response.feed.length }];
+    var messages = [];
     response.feed.forEach(function (item) {
       var secondsSincePost = Math.floor(
         (Date.now() - new Date(item.post.record.createdAt)) / 1000
       );
+
+      // Filter empty posts without any text (just a picture, for example)
+      if (item.post.record.text == "") {
+        return;
+      }
+
+      // Filter out replies:
+      if (
+        item.reply ||
+        (item.post && item.post.record && item.post.record.reply)
+      ) {
+        // `reply` object exists => this is a reply
+        return;
+      }
       messages.push({
         MessageType: "posts",
         PostName: item.post.author.displayName,
@@ -184,6 +202,10 @@ function fetchTrendingFeed(feed_id) {
         PostText: item.post.record.text,
         PostTime: secondsSincePost,
       });
+    });
+    messages.unshift({
+      MessageType: "post-count",
+      Count: messages.length,
     });
     sendMessage(messages);
     console.log("Feed items sent to Pebble successfully!");
@@ -252,7 +274,6 @@ Pebble.addEventListener("appmessage", function (e) {
       getPinnedFeeds(true);
       break;
     case "feed":
-      console.log(JSON.stringify(e.payload));
       fetchFeed(e.payload.FeedId);
       break;
     case "topic":

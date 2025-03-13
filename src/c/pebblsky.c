@@ -489,7 +489,7 @@ static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
   Tuple *msg_type = dict_find(iterator, MESSAGE_KEY_MessageType);
   if (!msg_type)
   {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "RequestType not found!");
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "MessageType not found!");
     return;
   }
 
