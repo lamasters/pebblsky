@@ -1,7 +1,7 @@
 {
   "name": "pebblsky",
   "author": "Liam Masters",
-  "version": "1.8",
+  "version": "1.91",
   "dependencies": {
     "pebble-clay": "^1.0.4"
   },
@@ -14,7 +14,8 @@
       "aplite",
       "basalt",
       "chalk",
-      "diorite"
+      "diorite",
+      "emery"
     ],
     "watchapp": {
       "watchface": false
