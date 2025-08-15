@@ -566,6 +566,12 @@ static void inbox_recv_callback(DictionaryIterator *iterator, void *context)
     if (num_user_feeds > MAX_FEEDS)
     {
       num_user_feeds = MAX_FEEDS;
+    } else if (num_user_feeds == 0) {
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "No feeds found!");
+      text_layer_set_text(s_user_feeds_loaded, "No feeds found!");
+      layer_set_hidden(menu_layer_get_layer(s_user_feeds_layer), true);
+      layer_set_hidden(text_layer_get_layer(s_user_feeds_loaded), false);
+      return;
     }
   }
   else if (strcmp(msg_type->value->cstring, "feeds") == 0)

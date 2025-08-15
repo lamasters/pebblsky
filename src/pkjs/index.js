@@ -100,6 +100,7 @@ function getPinnedFeeds(send_to_watch) {
   var session = createSession();
   if (!session) {
     console.log("No session");
+    sendMessage([{ MessageType: "feed-count", Count: 0 }]);
     return;
   }
   var token = session.accessJwt;
@@ -145,7 +146,7 @@ function getPinnedFeeds(send_to_watch) {
     }
   }
   messages.unshift({ MessageType: "feed-count", Count: numFeeds });
-  if (send_to_watch && numFeeds > 0) {
+  if (send_to_watch) {
     sendMessage(messages);
   } else {
     return id_to_uri;
