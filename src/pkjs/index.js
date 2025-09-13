@@ -16,8 +16,7 @@ function sendMessage(messages) {
   );
 }
 
-function fetchFeed(feed_id) {
-  var session = createSession();
+function fetchFeed(session, params) {
   if (!session) {
     console.log("No session");
     return;
@@ -27,77 +26,99 @@ function fetchFeed(feed_id) {
   if (!id_to_uri) {
     id_to_uri = getPinnedFeeds(false);
   }
-  var feed_uri = id_to_uri[feed_id];
+  var feed_uri = id_to_uri[params.feed_id];
   var settings = JSON.parse(localStorage.getItem("clay-settings"));
   var limit = 10;
   if (settings && settings.Limit) {
     limit = settings.Limit;
   }
   var xhr = new XMLHttpRequest();
+
+  xhr.onload = function () {
+    var response = JSON.parse(xhr.responseText);
+    var messages = [];
+    response.feed.forEach(function (item) {
+      var secondsSincePost = Math.floor(
+        (Date.now() - new Date(item.post.record.createdAt)) / 1000
+      );
+
+      // Filter empty posts without any text (just a picture, for example)
+      if (item.post.record.text == "") {
+        return;
+      }
+
+      // Filter out replies:
+      if (
+        item.reply ||
+        (item.post && item.post.record && item.post.record.reply)
+      ) {
+        // `reply` object exists => this is a reply
+        return;
+      }
+
+      messages.push({
+        MessageType: "posts",
+        PostName: item.post.author.displayName,
+        PostHandle: item.post.author.handle,
+        PostText: item.post.record.text,
+        PostTime: secondsSincePost,
+      });
+    });
+    messages.unshift({ MessageType: "post-count", Count: messages.length });
+    console.log("Got " + messages.length + " posts from feed");
+    if (messages.length > 0) {
+      sendMessage(messages);
+    }
+    console.log("Feed items sent to Pebble successfully!");
+  };
+
   xhr.open(
     "GET",
     "https://bsky.social/xrpc/app.bsky.feed.getFeed?limit=" +
       limit +
       "&feed=" +
-      feed_uri,
-    false
+      feed_uri
   );
   xhr.setRequestHeader("Authorization", "Bearer " + token);
   xhr.setRequestHeader("Content-Type", "application/json");
-  console.log("Fetching feed: " + feed_uri);
   xhr.send();
-  var response = JSON.parse(xhr.responseText);
-  var messages = [];
-  response.feed.forEach(function (item) {
-    var secondsSincePost = Math.floor(
-      (Date.now() - new Date(item.post.record.createdAt)) / 1000
-    );
-
-    // Filter empty posts without any text (just a picture, for example)
-    if (item.post.record.text == "") {
-      return;
-    }
-
-    // Filter out replies:
-    if (
-      item.reply ||
-      (item.post && item.post.record && item.post.record.reply)
-    ) {
-      // `reply` object exists => this is a reply
-      return;
-    }
-
-    messages.push({
-      MessageType: "posts",
-      PostName: item.post.author.displayName,
-      PostHandle: item.post.author.handle,
-      PostText: item.post.record.text,
-      PostTime: secondsSincePost,
-    });
-  });
-  messages.unshift({ MessageType: "post-count", Count: messages.length });
-  console.log("Got " + messages.length + " posts from feed");
-  if (messages.length > 0) {
-    sendMessage(messages);
-  }
-  console.log("Feed items sent to Pebble successfully!");
 }
 
-function fetchFeedGenerator(feed_uri, token) {
+function recursiveFetchFeeds(token, feeds, messages, id_to_uri, send_to_watch) {
   var xhr = new XMLHttpRequest();
+  var feed = feeds.shift();
+  var feed_uri = encodeURIComponent(feed.value);
+  xhr.onload = function () {
+    var response = JSON.parse(xhr.responseText);
+    console.log("Got feed details: " + JSON.stringify(response));
+    if (!response.error) {
+      id_to_uri[feed.id] = feed_uri;
+      messages.push({
+        MessageType: "feeds",
+        FeedId: feed.id,
+        FeedName: response.view.displayName,
+      });
+    }
+    if (feeds.length > 0) {
+      recursiveFetchFeeds(token, feeds, messages, id_to_uri, send_to_watch);
+    } else {
+      messages.unshift({ MessageType: "feed-count", Count: messages.length });
+      if (send_to_watch) {
+        sendMessage(messages);
+      }
+      localStorage.setItem("pinned_ids_to_uri", JSON.stringify(id_to_uri));
+    }
+  };
   xhr.open(
     "GET",
-    "https://bsky.social/xrpc/app.bsky.feed.getFeedGenerator?feed=" + feed_uri,
-    false
+    "https://bsky.social/xrpc/app.bsky.feed.getFeedGenerator?feed=" + feed_uri
   );
   xhr.setRequestHeader("Authorization", "Bearer " + token);
   xhr.setRequestHeader("Content-Type", "application/json");
   xhr.send();
-  return JSON.parse(xhr.responseText);
 }
 
-function getPinnedFeeds(send_to_watch) {
-  var session = createSession();
+function getPinnedFeeds(session, params) {
   if (!session) {
     console.log("No session");
     sendMessage([{ MessageType: "feed-count", Count: 0 }]);
@@ -105,53 +126,36 @@ function getPinnedFeeds(send_to_watch) {
   }
   var token = session.accessJwt;
   var xhr = new XMLHttpRequest();
-  xhr.open(
-    "GET",
-    "https://bsky.social/xrpc/app.bsky.actor.getPreferences",
-    false
-  );
+
+  xhr.onload = function () {
+    var response = JSON.parse(xhr.responseText);
+    console.log("Got user preferences");
+    var pinnedFeeds;
+    for (var preference of response.preferences) {
+      if (preference.$type === "app.bsky.actor.defs#savedFeedsPrefV2") {
+        pinnedFeeds = preference.items.filter(function (item) {
+          return item.pinned;
+        });
+        break;
+      }
+    }
+    console.log("Got feeds: " + JSON.stringify(pinnedFeeds));
+
+    var id_to_uri = {};
+    var messages = [];
+    recursiveFetchFeeds(
+      token,
+      pinnedFeeds,
+      messages,
+      id_to_uri,
+      params.send_to_watch
+    );
+  };
+
+  xhr.open("GET", "https://bsky.social/xrpc/app.bsky.actor.getPreferences");
   xhr.setRequestHeader("Authorization", "Bearer " + token);
   xhr.setRequestHeader("Content-Type", "application/json");
-  console.log("Fetching pinned feeds...");
   xhr.send();
-
-  var response = JSON.parse(xhr.responseText);
-  console.log("Got user preferences");
-  var pinnedFeeds;
-  for (var preference of response.preferences) {
-    if (preference.$type === "app.bsky.actor.defs#savedFeedsPrefV2") {
-      pinnedFeeds = preference.items.filter(function (item) {
-        return item.pinned;
-      });
-      break;
-    }
-  }
-  console.log("Got feeds: " + JSON.stringify(pinnedFeeds));
-
-  var id_to_uri = {};
-  var feedRes;
-  var messages = [];
-  var numFeeds = 0;
-  for (var feed of pinnedFeeds) {
-    var feed_uri = encodeURIComponent(feed.value);
-    feedRes = fetchFeedGenerator(feed_uri, token);
-    if (!feedRes.error) {
-      id_to_uri[feed.id] = feed_uri;
-      messages.push({
-        MessageType: "feeds",
-        FeedId: feed.id,
-        FeedName: feedRes.view.displayName,
-      });
-      numFeeds++;
-    }
-  }
-  messages.unshift({ MessageType: "feed-count", Count: numFeeds });
-  if (send_to_watch) {
-    sendMessage(messages);
-  } else {
-    return id_to_uri;
-  }
-  localStorage.setItem("pinned_ids_to_uri", JSON.stringify(id_to_uri));
 }
 
 function fetchTrendingFeeds() {
@@ -236,7 +240,7 @@ function fetchTrendingFeed(feed_id) {
   xhr.send();
 }
 
-function createSession() {
+function useSession(callback, params) {
   var session_url = "https://bsky.social/xrpc/com.atproto.server.createSession";
   var settings = JSON.parse(localStorage.getItem("clay-settings"));
   if (!settings) {
@@ -250,7 +254,20 @@ function createSession() {
     return;
   }
   var xhr = new XMLHttpRequest();
-  xhr.open("POST", session_url, false);
+  xhr.onload = function () {
+    if (!xhr.responseText) {
+      console.log("Error creating session: " + xhr.responseText);
+      sendMessage([
+        { MessageType: "session-error", Error: "Error signing in" },
+      ]);
+      return;
+    }
+    session = JSON.parse(xhr.responseText);
+    localStorage.setItem("bsky_session", JSON.stringify(session));
+    console.log("New session created");
+    callback(session, params);
+  };
+  xhr.open("POST", session_url);
   xhr.setRequestHeader("Content-Type", "application/json");
   xhr.send(
     JSON.stringify({
@@ -258,17 +275,6 @@ function createSession() {
       password: password,
     })
   );
-  if (!xhr.responseText) {
-    console.log("No session created");
-    sendMessage([
-      { MessageType: "session-error", Error: "Invalid credentials" },
-    ]);
-    return;
-  }
-  session = JSON.parse(xhr.responseText);
-  localStorage.setItem("bsky_session", xhr.responseText);
-  console.log("New session created");
-  return session;
 }
 
 Pebble.addEventListener("ready", function () {
@@ -279,10 +285,10 @@ Pebble.addEventListener("appmessage", function (e) {
   console.log("Received " + e.payload.MessageType + " request");
   switch (e.payload.MessageType) {
     case "user-feeds":
-      getPinnedFeeds(true);
+      useSession(getPinnedFeeds, { send_to_watch: true });
       break;
     case "feed":
-      fetchFeed(e.payload.FeedId);
+      useSession(fetchFeed, { feed_id: e.payload.FeedId });
       break;
     case "topic":
       fetchTrendingFeed(e.payload.TopicId);
