@@ -223,7 +223,7 @@ function fetchTrendingFeed(feed_id) {
     console.log("Feed items sent to Pebble successfully!");
   };
   var feed_uri = encodeURIComponent(
-    "at://did:plc:qrz3lhbyuxbeilrc6nekdqme/trending.bsky.app/" + feed_id
+    "at://did:plc:qrz3lhbyuxbeilrc6nekdqme/app.bsky.feed.generator/" + feed_id
   );
   var settings = JSON.parse(localStorage.getItem("clay-settings"));
   var limit = 10;
