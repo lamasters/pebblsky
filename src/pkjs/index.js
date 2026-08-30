@@ -90,7 +90,7 @@ function recursiveFetchFeeds(token, feeds, messages, id_to_uri, send_to_watch) {
   var feed_uri = encodeURIComponent(feed.value);
   xhr.onload = function () {
     var response = JSON.parse(xhr.responseText);
-    console.log("Got feed details: " + JSON.stringify(response));
+    console.log("Got feed details: " + JSON.stringify(response.displayName));
     if (!response.error) {
       id_to_uri[feed.id] = feed_uri;
       messages.push({
@@ -209,8 +209,8 @@ function fetchTrendingFeed(feed_id) {
       }
       messages.push({
         MessageType: "posts",
-        PostName: item.post.author.displayName,
-        PostHandle: item.post.author.handle,
+        PostName: item.post.author.displayName || "No Name",
+        PostHandle: item.post.author.handle || "No Handle",
         PostText: item.post.record.text,
         PostTime: secondsSincePost,
       });
