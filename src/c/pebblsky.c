@@ -3,6 +3,7 @@
 #define MAX_TOPICS 10
 #define MAX_FEEDS 15
 #define MAX_POSTS PBL_PLATFORM_SWITCH_DEFAULT(PBL_PLATFORM_TYPE_CURRENT, 15, 15, 25, 25, 25, 25, 25, 25)
+#define BUTTERFLY PBL_PLATFORM_SWITCH_DEFAULT(PBL_PLATFORM_TYPE_CURRENT, "", "", "", "", "🦋", "🦋", "🦋", "🦋")
 
 static Window *s_sections_window;
 static MenuLayer *s_sections_layer;
@@ -29,6 +30,7 @@ static TextLayer *s_time_layer;
 char time_buffer[24];
 
 static char s_user_feed_text[64];
+static char s_user_feeds_loading_text[64];
 
 static char s_topic_text[64];
 
@@ -211,11 +213,11 @@ static void draw_section_row_handler(GContext *ctx, const Layer *cell_layer, Men
 {
   if (cell_index->row == 0)
   {
-    menu_cell_basic_draw(ctx, cell_layer, "Trending", NULL, NULL);
+    menu_cell_basic_draw(ctx, cell_layer, "🔥 Trending", NULL, NULL);
   }
   else if (cell_index->row == 1)
   {
-    menu_cell_basic_draw(ctx, cell_layer, "My Feeds", NULL, NULL);
+    menu_cell_basic_draw(ctx, cell_layer, "💙 My Feeds", NULL, NULL);
   }
 }
 
@@ -252,7 +254,11 @@ static void draw_post_row_handler(GContext *ctx, const Layer *cell_layer, MenuIn
 static void draw_section_header(GContext *ctx, const Layer *cell_layer, uint16_t section_index,
                                 void *callback_context)
 {
-  menu_cell_basic_header_draw(ctx, cell_layer, PBL_IF_ROUND_ELSE("     Pebblsky", "Pebblsky"));
+  char section_header[32];
+  char round_section_header[32];
+  snprintf(section_header, sizeof(section_header), "Pebblsky %s", BUTTERFLY);
+  snprintf(round_section_header, sizeof(round_section_header), "     Pebblsky %s", BUTTERFLY);
+  menu_cell_basic_header_draw(ctx, cell_layer, PBL_IF_ROUND_ELSE(round_section_header, section_header));
 }
 
 static void draw_user_feeds_header(GContext *ctx, const Layer *cell_layer, uint16_t section_index,
@@ -324,7 +330,9 @@ static void user_feeds_window_load(Window *window)
   layer_set_hidden(menu_layer_get_layer(s_user_feeds_layer), true);
 
   s_user_feeds_loaded = text_layer_create(GRect(0, bounds.size.h / 2 - 20, bounds.size.w, 40));
-  text_layer_set_text(s_user_feeds_loaded, "Catching butterflies...");
+
+  snprintf(s_user_feeds_loading_text, sizeof(s_user_feeds_loading_text), "Catching butterflies... %s", BUTTERFLY);
+  text_layer_set_text(s_user_feeds_loaded, s_user_feeds_loading_text);
   text_layer_set_background_color(s_user_feeds_loaded, GColorClear);
   text_layer_set_text_color(s_user_feeds_loaded, GColorBlack);
   text_layer_set_text_alignment(s_user_feeds_loaded, GTextAlignmentCenter);
