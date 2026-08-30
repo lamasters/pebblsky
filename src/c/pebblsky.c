@@ -276,8 +276,14 @@ static void draw_topic_header(GContext *ctx, const Layer *cell_layer, uint16_t s
 static void draw_feed_header(GContext *ctx, const Layer *cell_layer, uint16_t section_index,
                              void *callback_context)
 {
-  char round_name[32] = "     ";
-  strcat(round_name, topics[selected_feed].name);
+  if (selected_feed < 0 || selected_feed >= num_topics || selected_feed >= MAX_TOPICS)
+  {
+    menu_cell_basic_header_draw(ctx, cell_layer, "Feed");
+    return;
+  }
+
+  char round_name[32] = {0};
+  snprintf(round_name, sizeof(round_name), "     %s", topics[selected_feed].name);
   menu_cell_basic_header_draw(ctx, cell_layer, PBL_IF_ROUND_ELSE(round_name, topics[selected_feed].name));
 }
 
