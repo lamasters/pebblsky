@@ -68,6 +68,69 @@ static Feed user_feeds[MAX_FEEDS];
 static Feed topics[MAX_TOPICS];
 static Post posts[MAX_POSTS];
 
+static int s_selected_topic_index = 0;
+static int s_scroll_x = 0;
+static AppTimer *s_scroll_timer = NULL;
+#define MARQUEE_SPEED_MS 100
+#define MARQUEE_PAUSE_TICKS 10
+static int s_pause_counter = 0;
+static bool s_end_pause_started = false;
+
+static void marquee_timer_callback(void *data) {
+  if (!s_topic_layer || !window_is_loaded(s_topics_window)) {
+    return;
+  }
+
+  char *name = topics[s_selected_topic_index].name;
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+  
+  GSize text_size = graphics_text_layout_get_content_size(
+    name, font, GRect(0, 0, 2000, 40),
+    GTextOverflowModeWordWrap, GTextAlignmentLeft
+  );
+
+  GRect bounds = layer_get_bounds(menu_layer_get_layer(s_topic_layer));
+  int max_scroll = text_size.w - bounds.size.w + 8;
+
+
+  if (max_scroll > 0) {
+    if (s_pause_counter > 0) {
+      s_pause_counter--;
+    } else {
+      s_scroll_x += 5; // Scroll speed in pixels
+      if (s_scroll_x > max_scroll) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "pause counter: %d end pause started: %d", s_pause_counter, s_end_pause_started);
+        if (!s_end_pause_started) {
+          s_end_pause_started = true;
+          s_pause_counter = MARQUEE_PAUSE_TICKS; // Pause at the end before looping
+        } else {
+          APP_LOG(APP_LOG_LEVEL_DEBUG, "Reached end of scroll, starting end pause.");
+          s_scroll_x = 0;
+          s_pause_counter = MARQUEE_PAUSE_TICKS; // Pause at the start before looping
+          s_end_pause_started = false;
+        }
+      }
+      layer_mark_dirty(menu_layer_get_layer(s_topic_layer));
+    }
+    s_scroll_timer = app_timer_register(MARQUEE_SPEED_MS, marquee_timer_callback, NULL);
+  }
+}
+
+static void topic_selection_changed_callback(struct MenuLayer *menu_layer, MenuIndex new_index, MenuIndex old_index, void *callback_context) {
+  s_selected_topic_index = new_index.row;
+  s_scroll_x = 0;
+  s_pause_counter = MARQUEE_PAUSE_TICKS; // Pause before initial scroll
+  s_end_pause_started = false;
+
+  if (s_scroll_timer) {
+    app_timer_cancel(s_scroll_timer);
+    s_scroll_timer = NULL;
+  }
+
+  layer_mark_dirty(menu_layer_get_layer(menu_layer));
+  s_scroll_timer = app_timer_register(MARQUEE_SPEED_MS, marquee_timer_callback, NULL);
+}
+
 static void select_section_callback(struct MenuLayer *s_menu_layer, MenuIndex *cell_index, void *callback_context)
 {
   memset(loaded_buffer, 0, sizeof(loaded_buffer));
@@ -230,13 +293,25 @@ static void draw_user_feed_row_handler(GContext *ctx, const Layer *cell_layer, M
   menu_cell_basic_draw(ctx, cell_layer, name, NULL, NULL);
 }
 
-static void draw_trend_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
-                                   void *callback_context)
-{
+static void draw_trend_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *callback_context) {
   char *name = topics[cell_index->row].name;
+  GRect bounds = layer_get_bounds(cell_layer);
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
 
-  snprintf(s_topic_text, sizeof(s_topic_text), "%s", name);
-  menu_cell_basic_draw(ctx, cell_layer, name, NULL, NULL);
+  bool is_selected = (cell_index->row == s_selected_topic_index) && menu_cell_layer_is_highlighted(cell_layer);
+
+  if (is_selected) {
+    graphics_context_set_text_color(ctx, PBL_IF_BW_ELSE(GColorWhite, GColorBlack));
+  } else {
+    graphics_context_set_text_color(ctx, GColorBlack);
+  }
+
+  int x_offset = is_selected ? -s_scroll_x : 0;
+  GRect text_bounds = GRect(bounds.origin.x + 8 + x_offset, bounds.origin.y + 4, bounds.size.w * 4, bounds.size.h);
+
+  graphics_draw_text(ctx, name, font, text_bounds,
+                     is_selected ? GTextOverflowModeWordWrap : GTextOverflowModeTrailingEllipsis,
+                     GTextAlignmentLeft, NULL);
 }
 
 static void draw_post_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
@@ -365,6 +440,7 @@ static void topic_window_load(Window *window)
                                                     .select_click = select_trending_feed_callback,
                                                     .draw_header = draw_topic_header,
                                                     .get_header_height = get_header_height,
+                                                    .selection_changed = topic_selection_changed_callback,
                                                 });
   menu_layer_set_click_config_onto_window(s_topic_layer, window);
   menu_layer_set_highlight_colors(s_topic_layer, PBL_IF_BW_ELSE(GColorBlack, GColorPictonBlue), PBL_IF_BW_ELSE(GColorWhite, GColorBlack));
@@ -381,8 +457,11 @@ static void topic_window_load(Window *window)
   layer_set_hidden(text_layer_get_layer(s_topics_loaded), true);
 }
 
-static void topic_window_unload(Window *window)
-{
+static void topic_window_unload(Window *window) {
+  if (s_scroll_timer) {
+    app_timer_cancel(s_scroll_timer);
+    s_scroll_timer = NULL;
+  }
   text_layer_destroy(s_topics_loaded);
   menu_layer_destroy(s_topic_layer);
 }
